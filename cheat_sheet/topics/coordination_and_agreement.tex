@@ -1,0 +1,177 @@
+\section{Election algorithms}
+\subsection{Bully Algorithm}
+
+Assumptions:
+\begin{itemize}
+    \item The system is synchronous(It can use timeouts to detect process failures and processes not responding to requests)
+    \item Topology is a strongly connected graph: there is a communication path between any two processes
+    \item Message delivery between processes is reliable
+    \item Each process knows the ID of every other process, but not which ones are now up or down
+    \item Several processes may start elections concurrently
+\end{itemize}
+
+Algorithm:
+\begin{enumerate}
+    \item P sends an Election message to all the processes with higher IDs and awaits OK messages
+    \item If a process receives an Election message, it returns an OK and starts another election, unless it has begun one already
+    \item If P receives an OK, it drops out the election and awaits a Coordinator message (P reinitiates the election if this message is not received)
+    \item If P does not receive any OK before the timeout, it wins and sends a Coordinator message to the rest
+\end{enumerate}
+\subsection{Chang and Roberts}
+Assumptions:
+\begin{itemize}
+    \item Processes are organized by ID in a logical unidirectional ring
+    \item Each process only knows its successor in the ring
+    \item Assumes that system is asynchronous
+    \item Multiple elections can be in progress
+    \item Redundant election messages are killed off
+\end{itemize}
+
+\subsection{Enhanced Ring}
+\begin{enumerate}
+    \item P sends an Election message (with its process ID) to its closest alive successor.
+    \begin{itemize}
+        \item Sequentially poll successors until one responds.
+        \item Each process must know all nodes in the ring.
+    \end{itemize}
+    
+    \item At each step along the way, each process adds its ID to the list in the message.
+    
+    \item When the message gets back to the initiator (i.e., the first process that detects its ID in the message), it elects as coordinator the process with the highest ID and sends a Coordinator message with this ID.
+    
+    \item Again, each process adds its ID to the message.
+    
+    \item Once Coordinator message gets back to initiator:
+    \begin{itemize}
+        \item If the elected process is in the ID list, the election is over.
+        \item Everyone knows who the coordinator is and who the members of the new ring are.
+        \item Otherwise, the election is reinitiated.
+    \end{itemize}
+\end{enumerate}
+
+
+\section{Multicast Communication}
+\subsection{Basic Reliable Multicast}
+\begin{enumerate}
+    \item Sender \( P \) assigns sequence number \( SP \) to each outgoing message.
+    \item \( P \) stores each outgoing message in a history buffer, removing it only after acknowledgment from all recipients.
+    \item Each \( Q \) tracks the sequence number \( LQ(P) \) of the last message from \( P \).
+\end{enumerate}
+
+\begin{itemize}
+    \item Upon receiving a message from \( P \), \( Q \) follows:
+    \begin{itemize}
+        \item If \( SP = LQ(P) + 1 \):
+        \begin{itemize}
+            \item \( Q \) delivers, increases \( LQ(P) \), and acknowledges to \( P \).
+        \end{itemize}
+        \item If \( SP > LQ(P) + 1 \):
+        \begin{itemize}
+            \item \( Q \) queues the message, requests missing ones, and delivers upon alignment.
+        \end{itemize}
+        \item If \( SP \leq LQ(P) \):
+        \begin{itemize}
+            \item \( Q \) discards as it has delivered the message.
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+\subsection{Scalable Reliable Multicast}
+\begin{itemize}
+    \item Only missing messages are reported (NACK)
+- NACKs are multicast to all the group members
+- Successful delivery is never acknowledged
+\item Each process waits a random delay prior to sending a NACK \\
+- If a process is about to NACK, this is suppressed as a result of the first multicast NACK \\
+- In this way, only one NACK will reach the sender
+\end{itemize}
+
+
+\subsection{Ordered Multicast}
+remember to also deliver the message you are sending!
+\subsubsection{FIFO ordering}
+Using sequence numbers per sender:
+\begin{enumerate}
+
+    \item A message delivery is postponed and stored in a hold-back queue until its sequence number corresponds to the next expected number.
+    \item For more detailed information, please refer to the 'basic reliable multicast'.
+\end{enumerate}
+\subsubsection{Total ordering}
+ Using sequence numbers specific to each group:
+    \begin{enumerate}
+        \item Send messages to a sequencer, which then multicasts them with sequential numbering.
+        \\
+        (Message delivery is deferred and stored in a hold-back queue until its sequence number is reached)
+        
+        
+        \item Processes collaborate to determine sequence numbers (\(A_j\) is the largest agreed number that he has received so far):
+        \begin{enumerate}
+    \item The sender multicasts message \( m \).
+    \item Each receiver \( j \) replies with a proposed sequence number for message \( m \) (including its process ID) that is \( P_j = \text{Max}(A_j, P_j) + 1 \) and places \( m \) in an ordered hold-back queue according to \( P_j \).
+    \item The sender selects the largest of all proposals, \( N \), as the agreed number for \( m \) and multicasts it.
+    \item Each receiver \( j \) updates \( A_j = \text{Max}(A_j, N) \), tags message \( m \) with \( N \), and reorders the hold-back queue if needed.
+    \item A message is delivered when it is at the front of the hold-back queue and its number is agreed.
+\end{enumerate}
+
+    \end{enumerate}
+
+
+\subsubsection{Causal ordering}
+Utilizing Vector Clocks:
+A message is only considered delivered if all causally preceding messages have been delivered.
+        \begin{enumerate}
+            \item \( P_i \) increments \( \text{VC}_i[i] \) only upon sending a message.
+            \item If \( P_j \) receives a message \( m \) from \( P_i \), it delays the delivery until certain conditions are satisfied:
+            \begin{enumerate}
+                \item \( \text{VC}(m)[i] = \text{VC}_j[i] + 1 \) - This means \( m \) is the next expected message from \( P_i \).
+                \item \( \text{VC}(m)[k] \leq \text{VC}_j[k] \) for all \( k \neq i \) - Ensures that \( P_j \) has seen all messages seen by \( P_i \) before \( m \).
+            \end{enumerate}
+            \item After delivering \( m \), \( P_j \) increments \( \text{VC}_j[i] \).
+        \end{enumerate}
+
+
+
+\section{Consensus}
+\subsection{Dolev \& Strong's Algorithm}
+The algorithm progresses over \( f + 1 \) rounds:
+    \begin{enumerate}
+        \item Each process initially proposes a value.
+        \item From round 1 to round \( f + 1 \), every process:
+        \begin{enumerate}
+            \item Multicasts new values (those not transmitted in prior rounds). Initially, it sends its proposed value.
+            \item Gathers values from other processes and logs any novel values received.
+            
+        \end{enumerate}
+        A round concludes either when values from all processes are assembled or upon a timeout, determined by the maximum message latency.
+        \item Each process finalizes its decision based on the accumulated values.
+    \end{enumerate}
+
+
+\subsection{OM Algorithm}
+\( \text{OM}(m) \): A solution with oral messages with at most \( m \) traitors and at least \( 3m+1 \) generals.
+   Assumptions:
+        \begin{enumerate}
+            \item Sent messages are delivered correctly (no corruption).
+            \item The absence of a message can be detected.
+            \item The receiver of a message knows who sent it.
+        \end{enumerate}
+  
+     OM algorithm is recursive:
+     \( \text{OM}(0) \):
+        \begin{enumerate}
+            \item The commander sends his value to every lieutenant.
+            \item Each lieutenant accepts the value he receives as the order from the commander
+        \end{enumerate}
+       \( \text{OM}(m), m > 0 \):
+        \begin{enumerate}
+            \item The commander sends his value to every lieutenant.
+            \item Each lieutenant acts as a commander in \( \text{OM}(m-1) \) to broadcast the value he got from the commander to each of the remaining \( n-2 \) lieutenants.
+            \item Each lieutenant accepts the majority value \( \text{majority}(v_1, v_2, \ldots, v_{n-1}) \) as the order from the commander.
+        \end{enumerate}
+   
+     Definitions:
+    \begin{itemize}
+        \item \( v_i \): Value directly received from the commander in 'step 1'.
+        \item \( v_j, \forall j \in \{1, n-1\}, i \neq j \): Values indirectly received from the other lieutenants in 'step 2'.
+        \item If a value is not received, it is substituted by a default value.
+    \end{itemize}

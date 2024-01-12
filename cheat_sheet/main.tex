@@ -1,0 +1,54 @@
+\documentclass[10pt,landscape,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[ngerman]{babel}
+\usepackage[T1]{fontenc}
+%\usepackage[LY1,T1]{fontenc}
+%\usepackage{frutigernext}
+%\usepackage[lf,minionint]{MinionPro}
+\usepackage{tikz}
+\usetikzlibrary{shapes,positioning,arrows,fit,calc,graphs,graphs.standard}
+\usepackage[nosf]{kpfonts}
+\usepackage[t1]{sourcesanspro}
+\usepackage{multicol}
+\usepackage{wrapfig}
+\usepackage[top=0mm,bottom=2mm,left=0mm,right=1mm]{geometry}
+\usepackage[framemethod=tikz]{mdframed}
+\usepackage{microtype}
+\usepackage{pdfpages}
+\usepackage{enumitem}
+\usepackage{titlesec}
+
+\linespread{0.8} % adjust line spacing
+
+
+% sections titles
+\titleformat{\section}
+{\normalfont\footnotesize\bfseries}{\thesection}{1em}{}
+
+\titleformat{\subsection}
+{\normalfont\footnotesize\bfseries}{\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+{\normalfont\footnotesize\bfseries}{\thesubsubsection}{1em}{}
+
+
+\let\bar\overline
+
+\begin{document}
+\setlist[itemize]{itemsep=0pt, parsep=0pt, leftmargin=*}
+\setlist[enumerate]{itemsep=0pt, parsep=0pt,leftmargin=*}
+
+
+\titlespacing*{\section}{0pt}{*0.8}{*0.4}
+\titlespacing*{\subsection}{0pt}{*0.8}{*0.4}
+\titlespacing*{\subsubsection}{0pt}{*0.8}{*0.4}
+
+
+%\footnotesize
+\small
+\begin{multicols*}{4}
+\input{topics/time_and_global_state}
+\input{topics/coordination_and_agreement}
+\input{topics/distributed_data}
+\end{multicols*}
+\end{document}

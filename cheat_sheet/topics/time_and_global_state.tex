@@ -1,0 +1,76 @@
+\section{Time}
+\subsection{Physical Clocks}
+Synchronize at least every $R < \delta/2\rho$ to limit skew between two clocks to less than $\delta$ time units
+\subsubsection{Cristian Algorithm}
+Synchronize nodes with a server using UTC (Coordinated Universal Time) receiver within a specified bound, termed as External synchronization:
+\begin{enumerate}
+    \item Each client queries the server for time at regular intervals \( R \).
+    \item The client adjusts its time to \( TS + \frac{\text{RTT}}{2} \).
+    \begin{itemize}
+        \item Here, \( \text{RTT} \) denotes the round-trip time, calculated as \( T2 - T1 \).
+        \item assumes symmetrical latency.
+        \item The accuracy of the client's clock is \( \pm (\frac{\text{RTT}}{2} - \text{Min}) \).
+    \end{itemize}
+\end{enumerate}
+    
+
+\subsubsection{Berkeley Algorithm}
+Maintain clock synchronization among entities within a bound (Internal synchronization):
+    \begin{enumerate}
+        \item Master polls slave clocks at intervals \( R \).\\
+       -Master adapts slave clocks considering round-trip times.
+        \item Master calculates a fault-tolerant average of slave clocks.\\
+        -Discards clocks outside the bound.
+        \item Master transmits adjustments to local clocks.
+    \end{enumerate}
+
+
+\subsection{Logical Clocks}
+\subsubsection{Lamport}
+ Each process \( P_i \) has a local counter \( C_i \).
+    \begin{enumerate}
+        \item Event at \( P_i \) increments \( C_i \).
+        \item \( P_i \) sets \( \text{ts}(m) = C_i \) for message \( m \).
+        \item Upon receiving \( m \), \( P_j \) adjusts \( C_j \) and increments.
+    \end{enumerate}
+
+
+\subsubsection{Vector Clocks}
+ Each \( P_i \) has \( \text{VC}_i[1 \ldots N] \).
+    \begin{enumerate}
+        \item \( P_i \) increments \( \text{VC}_i[i] \) and sends \( \text{VC}_i \) with \( m \).
+        \item \( P_j \) updates \( \text{VC}_j \) on receiving \( m \).
+    \end{enumerate}
+ Vector clocks detect causality:
+    \begin{enumerate}
+        \item \( \text{VC}(a) < \text{VC}(b) \) implies \( a \rightarrow b \).
+        \item If neither \( \text{VC}(a) < \text{VC}(b) \) nor \( \text{VC}(b) < \text{VC}(a) \), \( a \parallel b \).
+    \end{enumerate}
+
+\section{Chandy-Lamport algorithm}
+Assumptions:
+\begin{itemize}
+    \item Reliable processes and channels.
+    \item Unidirectional, FIFO channels.
+    \item Strongly connected topology.
+    \item Processes execute during snapshot.
+    \item Any process initiates a snapshot.
+\end{itemize}
+Steps by initiator:
+\begin{itemize}
+    \item Record state.
+    \item Send marker on every channel.
+    \item Record messages until markers received.
+\end{itemize}
+On receiving marker over c:
+\begin{enumerate}
+    \item If no state recorded:
+    \begin{enumerate}
+        \item Record state.
+        \item Send marker on every channel.
+        \item Record c as empty set.
+        \item Record other channels until markers.
+    \end{enumerate}
+    \item Otherwise, record state of c as set of messages received over c since it saved its state.
+\end{enumerate}
+Finish after recording state and all incoming channels.

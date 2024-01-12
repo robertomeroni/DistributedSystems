@@ -1,0 +1,239 @@
+\section{Concurrency Control}
+\subsection{Strict Two-Phase Locking}
+\begin{enumerate}
+\item When a read or write operation accesses an object within a transaction:
+\begin{enumerate}
+\item If the object is not already locked, it is locked and the operation proceeds.
+\item If the object has a conflicting lock set by another transaction, the transaction must wait until it is unlocked.
+\item If the object has a non-conflicting lock set by another transaction, the lock is shared and the operation proceeds.
+\item If the object has already been locked in the same transaction, the lock will be promoted if necessary and the operation proceeds (where promotion is prevented by a conflicting lock, rule b is used).
+\end{enumerate}
+
+\item When a transaction commits or aborts, the server unlocks all objects it locked for the transaction.
+\end{enumerate}
+
+\subsection{Timestamps}
+\begin{itemize}
+\item Each transaction has a unique timestamp, which:
+\begin{itemize}
+\item Defines its position in the sequence of transactions.
+\item Is assigned when the transaction starts.
+\end{itemize}
+
+\item Each object \( x \) maintains the following information:
+\begin{enumerate}
+\item Write timestamp for its committed value: \( \text{wts}(x) \).
+\item Read timestamps, represented by the highest: \( \text{rts}(x) \).
+\item Pending read and tentative write operations, along with their corresponding timestamps.
+\end{enumerate}
+
+\item Operations are validated upon execution by comparing object and transaction timestamps.
+\end{itemize}
+
+\begin{itemize}
+\item Transaction \( T \) performs a write operation on \( x \):
+\begin{itemize}
+\item Valid only if object \( x \) was last read and written by earlier transactions, satisfying the conditions: \( (\text{ts}(T) \geq \text{rts}(x)) \) AND \( (\text{ts}(T) > \text{wts}(x)) \).
+\item Add to the tentative writes a new version of the object with a write timestamp set to \( \text{ts}(T) \).
+\item Overwrite the version if it already exists.
+\item Tentative versions are maintained in order based on their timestamps.
+\item If the write operation is not valid, transaction \( T \) is aborted because a transaction with a later timestamp has already read or written the object.
+\end{itemize}
+
+\item Transaction \( T \) performs a read operation on \( x \):
+\begin{itemize}
+\item Valid only if object \( x \) was last written by an earlier transaction, satisfying: \( \text{ts}(T) > \text{wts}(x) \).
+\item Must read the version with the highest write timestamp lower than the transaction one.
+\item If this is still tentative, the read stays pending until the earlier transaction completes.
+\item Otherwise, read the committed version and set \( \text{rts}(x) \) to \( \max\{\text{rts}(x), \text{ts}(T)\} \).
+\item If \( T \) has already written the object, this will be used.
+\item If the read operation is not valid, transaction \( T \) is aborted.
+\end{itemize}
+
+\item Transaction \( T \) performs a commit operation:
+\begin{itemize}
+\item For each object \( x \) written by \( T \), replace the committed version with the tentative one and set \( \text{wts}(x) \) to \( \text{ts}(T) \).
+\item If \( x \) has any pending read, write, or commit operation with a lower timestamp than \( T \), the commit remains pending until those earlier operations complete.
+\item Otherwise, the commit proceeds and also resumes any pending read and commit operations waiting for \( T \).
+\end{itemize}
+\end{itemize}
+
+
+\subsection{Optimistic Concurrency Control}
+\subsubsection{Working phase:}
+\begin{itemize}
+\item Transaction keeps a tentative version of each object that it updates. This allows the transaction to abort with no effect on the objects.
+\item Transaction also keeps the read and write set:
+\begin{itemize}
+\item Read set records the objects read by the transaction.
+\item Write set records the objects written by the transaction.
+\end{itemize}
+\item Read operations are directed to the tentative version if it exists; otherwise, they are directed to the committed one.
+\item Write operations are only performed onto the tentative version.
+\end{itemize}
+
+\subsubsection{Validation phase:}
+\begin{itemize}
+\item A transaction is given a sequence number when entering the validation phase, but real assignment is postponed until successful validation and update.
+\item On transaction \( T_{\text{vcommit}} \), check for conflicts with overlapping \( T_i \) transactions (those not yet committed at the start of \( T_{\text{v}} \)).
+\item If the transaction is valid, it is allowed to commit; otherwise, abort the transaction or perform some conflict resolution
+\end{itemize}
+
+\subsubsection{Update phase:}
+Backward validation:
+\begin{itemize}
+\item Validate a transaction \( T_v \) by comparing its read set with the write set of (committed) transactions \( T_i \) with sequence numbers \( T_{\text{start}} < T_i \leq T_{\text{end}} \).
+\begin{itemize}
+\item \( T_{\text{start}} \) is the highest sequence number assigned when transaction \( T_v \) enters the working phase.
+\item \( T_{\text{end}} \) is the highest sequence number assigned when transaction \( T_v \) enters the validation phase.
+\end{itemize}
+\item If a conflict is detected, abort the transaction \( T_v \). All write sets of overlapping transactions must be maintained until their last concurrent transaction finishes.
+\end{itemize}
+Forward validation:
+\\
+ Validate a transaction \( T_v \) by comparing its write set with the read set of overlapping active (uncommitted) transactions.
+\begin{enumerate}
+\item Abort the transaction being validated.
+\item Abort the conflicting active transactions.
+\item Allow the conflicting transactions to complete and then try validation again.
+\end{enumerate}
+
+Dynamic read sets must be consistently checked, e.g., block reads of active transactions on contended objects during the validation and update phases.
+
+
+\subsection{Distributed Commit}
+\begin{enumerate}
+    \item Coordinator sends a Vote-request to all participants, including itself.
+    
+    \item Each participant replies with Vote-commit if it can commit locally; otherwise, it replies with Vote-abort and directly aborts.
+    
+    \item Coordinator collects all the votes, including its own. If everyone voted to commit, it sends Global-commit; otherwise, it sends Global-abort.
+    
+    \item Participants either COMMIT or ABORT according to the received message and optionally send an ACK when done.
+\end{enumerate}
+
+\subsection{Version Vectors}
+Each replica maintains a vector for each item, indicating its version number per replica.
+    \begin{itemize}
+        \item Increment its own version number with every write operation.
+        \item Each incoming write includes the vector from a prior read, known as the causal context.
+        \item The replica compares both vectors to differentiate between causally-related and concurrent writes.
+        \begin{itemize}
+            \item Overwrite values from writes that happened before.
+            \item Retain values from concurrent writes as siblings.
+        \end{itemize}
+    \end{itemize}
+
+Dotted version vectors implement this idea:
+    \begin{itemize}
+        \item Each replica \( k \) maintains a version vector \( VV_k \) for each item, represented as \( \{(r_1, i_1, j_1), \ldots, (r_n, i_n, j_n)\} \).
+        \begin{itemize}
+            \item Here, \( (r_k, \text{range of events} \{1, i_k\} [, \text{last event} j_k]) \).
+            \item For example: \( \{(a, 2), (b, 1), (c, 2, 4)\} \equiv \{a_1, a_2, b_1, c_1, c_2, c_4\} \).
+        \end{itemize}
+        \item When an incoming write occurs, it includes the vector \( VV_{\text{inc}} \). Otherwise:
+        \begin{itemize}
+            \item \( VV_{\text{new}} = \text{merge}(VV_{\text{inc}}, VV_k) \)
+            \item Increment \( VV_{\text{new}} \).
+            \item Obtain the last event of \( VV_{\text{new}} \) as a dot (using causal context from \( VV_{\text{inc}} \)).
+            \item Add the new value as a sibling.
+            \item Prune all siblings \( s \) for which \( VV_{\text{inc}} \geq VV_k(s) \).
+        \end{itemize}
+        \item If \( VV_{\text{inc}} \geq VV_k \):
+        \begin{itemize}
+            \item Increment \( VV_{\text{inc}} \).
+            \item Obtain the last event of \( VV_{\text{inc}} \) as a dot.
+            \item Write the incoming value as the sole value (pairwise maximum).
+        \end{itemize}
+    \end{itemize}
+
+\section{quorum-based protocols}
+
+ Clients must receive responses from a quorum of the \( N \) replicas before performing either a read ($N_{R}$)) or a write ($N_{W}$)).
+    \begin{itemize}
+    \item read-write:
+    \(
+    N_R + N_W > N
+    \)
+    
+    \item write-write:
+    \(
+    N_W > \frac{N}{2}
+    \)
+\end{itemize}
+
+\subsection{Quorum Write}
+\begin{enumerate}
+    \item{Read phase}
+    \begin{itemize}
+        \item Send read requests to all (or $N_{R}$) replicas.
+        \item Await replies from $N_{R}$ replicas.
+        \item Learn the highest version among the replicas.
+       \\
+       (Merge siblings if needed)   
+    \end{itemize}
+    
+    \item{Write phase}
+    \begin{itemize}
+        \item Send write requests (containing the version learned) to all (or $N_{W}$) replicas. If $N_{W}$, remaining replicas are updated as a background task (anti-entropy).
+        \item Await ACKs from $N_{W}$ replicas.
+        \item Write is complete and can return to the user code.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Quorum Read}
+\begin{enumerate}
+    \item{Read phase}
+    \begin{itemize}
+        \item Send read requests to all (or $N_{R}$) replicas.
+        \item Await replies from $N_{R}$ replicas.
+        \item If all version numbers are the same, return.
+    \end{itemize}
+    
+    \item{Write phase ('read repair')}
+    \begin{itemize}
+        \item Otherwise, send write requests (containing the largest version number and the associated up-to-date value) to all (or only outdated) replicas.
+        \item Await ACKs from $N_{W}$ (or only updated) replicas.
+        \item Return the value to the user code.
+    \end{itemize}
+\end{enumerate}
+
+\section{Flat Process Groups}
+Use process replication to build a flat process group that tolerates process failures:
+\begin{itemize}
+    \item Processes are identical, and the group response is defined through voting.
+\end{itemize}
+\subsection{Active Replication}
+\begin{itemize}
+    \item Clients send requests to all workers and await one reply (crash) or \( K + 1 \) identical replies from workers(Byzantine).
+ 
+    
+    \item \( K \)-fault tolerance on worker failure:
+    \begin{itemize}
+        \item \( K + 1 \) processes can tolerate \( K \) crash/omission failures.
+        \item \( 2K + 1 \) processes can tolerate \( K \) Byzantine failures.
+    \end{itemize}
+(\( K \) failing processes could generate the same wrong reply; hence, \( K + 1 \) correct processes are needed.)
+\end{itemize}
+
+\subsection{Quorum-Based}
+\begin{itemize}
+    \item Clients send requests to all workers and await replies from $N_{R}$ (or $N_{W}$) of them.
+    
+    \item \( K \)-fault tolerance on worker failure:
+    \begin{itemize}
+        \item \( 2K + 1 \) and \( 2K \) processes can tolerate \( K \) crash or omission failures for writes and reads, respectively:
+    \begin{itemize}
+        \item \( N_W = \frac{N}{2} + 1 \); \( N = K + N_W \Rightarrow N > 2K \)
+        \item \( N_R + N_W = N + 1 \); \( N = K + N_R \Rightarrow N \geq 2K \)
+    \end{itemize}
+    
+    \item \( 3K + 1 \) and \( 3K \) processes can tolerate \( K \) Byzantine failures for writes and reads, respectively:
+
+    \begin{itemize}
+        \item \( N_W = \frac{N + K}{2} + 1 \); \( N = K + N_W \Rightarrow N > 3K \)
+        \item \( N_R + N_W = K + N + 1 \); \( N = K + N_R \Rightarrow N \geq 3K \)
+    \end{itemize}
+    \end{itemize}
+\end{itemize}
+
